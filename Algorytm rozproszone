@@ -1,0 +1,58 @@
+-każdy proces przetrzymuje informację o rozmarach tratków i legionów - Te wartości nie zmieniają się w czasie.
+
+
+
+
+
+-proces Pi wybiera trakt Tj (losowo)
+    -proces ustawia swoje miejsce w kolejce na LiczbęProcesów
+    -Jeżeli jest miejsce na trakcie:
+        -proces Pi wysyła broadcast - chcę wejść na trakt Tj
+        -proces ustawia swoje miejsce w kolejce na 0
+    -w przeciwnym wypadku:
+        -proces czeka na aktualizację zajętości traktów
+
+
+-Proces odbiera broadcast - wejście na trakt:
+    -Jeżeli odebrany trakt Tj jest identyczny z wybranym przez ten proces:
+        -Jeżeli odebrane miejsce w kolejce jest mniejsze niż moje lub identyczne, ale mój indeks procesu jest większy niż odebrany:
+            -Proces odsyła potwierdzenie.
+        -W przeciwnym wypadku:
+            -Proces odsyła sprzeciw.
+    -W przeciwnym wypadku:
+        -Proces odsyła potwierdzenie.
+    
+------------------------------------------------------------------------
+
+-Proces zebrał wszystkie potwierdzenia:
+    -Proces aktualizuje swoją tablicę traktów
+    -Proces zajmuje trakt (wchodzi do sekcji krytycznej)
+
+-Proces odebrał sprzeciw:
+    -Proces zwiększa swoje miejsce w kolejce o 1.
+
+------------------------------------------------------------------------
+
+-Proces odebrał informację o wejściu na trakt:
+    -Proces aktualizuje swoją tablicę traktów.
+    -Jeżeli proces oczekuje na trakt który został zwolniony:
+        -Proces zmniejsza swoje miejsce w kolejce o 1.
+
+-Proces odebrał informację o zejściu z traktu:
+    -Proces aktualizuje swoją tablicę traktów.
+    -Jeżeli jest miejsce na trakcie dla sumy legionistów w procesach poprzedających ten proces w kolejce i tego procesu:
+        -proces Pi wchodzi na trakt
+    -w przeciwnym wypadku:
+        -proces czeka na aktualizację zajętości traktów
+
+------------------------------------------------------------------------
+
+-Proces wchodzi na trakt:
+    -Proces rozsyła broadcast - wszedłem na trakt Tj, zająłem Ri miejsca.
+
+-Proces wychodzi z traktu:  
+    -Proces rozsyła broadcast - wyszedłem z traktu Tj, zwolniłem Ri miejsca.
+
+------------------------------------------------------------------------
+
+
