@@ -2,6 +2,8 @@
 
 
 
+WAŻNE
+-proces musi ustawiać swój piorytet na gorszy niż piorytet kogoś, komu odpowiedział potweirdzenie - kolejka nie jst potrzebna
 
 
 -proces Pi wybiera trakt Tj (losowo)
