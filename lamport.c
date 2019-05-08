@@ -103,7 +103,7 @@ void refuseMessage(int* message){
 
 
 //----------------------------------------------------
-//Trzeba jeszcze dodać zwiększanie znacznika czasowego
+//Trzeba jeszcze dodać zwiększanie znacznikaTOKEN_MAX_VALUE czasowego
 //W przypadku odebrania zapytania? 
 //Tylko - chyba, nie zwiększa się znacznik gdy odbieramy odpowiedź na nasz broadcast
 //----------------------------------------------------
@@ -154,6 +154,17 @@ void localSection(int maxWaitTime){
     sleep(waitTime);
 }
 
+void askForSpace(){
+    int* newMessage[MSG_SIZE];
+
+    newMessage[SENDER_ID] = myId;
+    newMessage[ROAD_NUMBER] = myRoadNumber;
+    newMessage[TIME_STAMP] = myTimeStamp;
+    newMessage[MESSAGE_TYPE] = ASK_FOR_SPACE;
+    
+    MPI_Bcast(newMessage, MSG_SIZE, MPI_INT, myId, MPI_COMM_WORLD);
+}
+
 
 int main(int argc, char **argv)token
 {
@@ -193,13 +204,8 @@ int main(int argc, char **argv)token
         myRoadNumber = rand % NUMBER_OF_ROADS;
 
         askForSpace(myRoadNumber);
+        //Trzeba jakoś uśpić ten wątek dopóki wszystkie inne nie odpowiedzą na zapytanie
     }
-
-
-
-
-
-
 
 
     printf("%d: Koncze dzialanie\n", myId);
