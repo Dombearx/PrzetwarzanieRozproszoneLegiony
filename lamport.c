@@ -39,6 +39,8 @@ int myRoadNumber;
 int myTimeStamp;
 int myId;
 
+
+
 /**
  * Zwraca 1 jeżeli należy odesłać potwiedzenie
  * Zwraca 0 jeżeli nalezy odesłac sprzeciw
@@ -100,7 +102,11 @@ void refuseMessage(int* message){
 }
 
 
-
+//----------------------------------------------------
+//Trzeba jeszcze dodać zwiększanie znacznika czasowego
+//W przypadku odebrania zapytania? 
+//Tylko - chyba, nie zwiększa się znacznik gdy odbieramy odpowiedź na nasz broadcast
+//----------------------------------------------------
 void *messageReciver(void *message_c){
     int *message = (int*)message_c;
     while(1){
