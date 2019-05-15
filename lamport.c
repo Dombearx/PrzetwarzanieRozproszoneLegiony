@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/ipc.h>
 #include <sys/msg.h>
+#include <stdbool.h>
 
 #define MSG_SIZE 4
 //0 - Numer traktu
@@ -14,7 +15,7 @@
 //3 - Typ informacji
 
 //Typy informacji
-#define ACCPET 10
+#define ACCEPT 10
 #define REFUSE 11
 #define FREE 12
 #define ASK_FOR_SPACE 14
@@ -38,40 +39,41 @@ int roads[NUMBER_OF_ROADS]; //Rozmiary traktów
 int myRoadNumber;
 int myTimeStamp;
 int myId;
+int size;
+
+bool recivedAllMessages = false;
 
 
 
 /**
- * Zwraca 1 jeżeli należy odesłać potwiedzenie
- * Zwraca 0 jeżeli nalezy odesłac sprzeciw
+ * Zwraca 0 jeżeli należy odesłać potwiedzenie
+ * Zwraca 1 jeżeli nalezy odesłac sprzeciw
 **/
 int askForSpace(int* message){
     int roadNumber = message[ROAD_NUMBER];
     if(myRoadNumber == roadNumber){
         //Proces ubiega się o ten sam trakt 
         int timeStamp = message[TIME_STAMP];
-        if(myTimeStamp <= timeStamp){
-            if(myTimeStamp == timeStamp){
-                //Równy piorytet - należy sprawdzić id procesu, aby wybrać lepszy
-                int senderId = message[SENDER_ID];
-                if(myId < senderId){
-                    //Id tego procesu jest lepsze, nalezy odesłac sprzeciw
-                    return 0;
-                } else {
-                    //Proces ma lepsze id, nigdy nie będą równe
-                    return 1;
-                }
+        if(myTimeStamp < timeStamp){
+            //Znacznik czasowy tego procesu jest mniejszy, nalezy odesłać sprzeciw
+            return 1;  
+        } else if(myTimeStamp == timeStamp){
+            //Równy piorytet - należy sprawdzić id procesu, aby wybrać lepszy
+            int senderId = message[SENDER_ID];
+            if(myId < senderId){
+                //Id tego procesu jest lepsze, nalezy odesłac sprzeciw
+                return 1;
             } else {
-                //Znacznik czasowy tego procesu jest lepszy, nalezy odesłać sprzeciw
+                //Proces ma lepsze id, nigdy nie będą równe
                 return 0;
-            }   
+            }        
         } else {
-            //Proces ma lepszy piorytet
-            return 1;
-        }
+            //Odebrany znacznik czasowy jest mniejszy niż mój
+            return 0;
+        }        
     } else {
         //Proces ubiega się o inny trakt
-        return 1;
+        return 0;
     }
 }
 
@@ -83,7 +85,7 @@ void acceptMessage(nt* message){
     newMessage[ROAD_NUMBER] = myRoadNumber;
     newMessage[TIME_STAMP] = myTimeStamp;
     newMessage[SENDER_ID] = myId;
-    newMessage[MESSAGE_TYPE] = ACCPET;
+    newMessage[MESSAGE_TYPE] = ACCEPT;
 
     MPI_Send(newMessage, MSG_SIZE, MPI_INT, reciver, MSG_TAG_TOKEN, MPI_COMM_WORLD);    
 }
@@ -112,15 +114,16 @@ void *messageReciver(void *message_c){
     while(1){
         MPI_Recv(message, MSG_SIZE, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         switch(message[MESSAGE_TYPE]){
-            case ACCPET:
-                //Proces wysyłający wiadomość zezwala na wejście na trakt - jest dalej w kolejce lub nie ubiega się o ten trakt
+            case ACCEPT:
                 int senderId = message[SENDER_ID];
-                legions[senderId] = 1;
+                legions[senderId] = 0;
+                recivedMessages++;
             break;
             case REFUSE:
                 //Proces wysyłający wiadomość odmawia zajęcia traktu - jest szybciej w kolejce do niego
                 int senderId = message[SENDER_ID];
-                legions[senderId] = 0;
+                legions[senderId] = 1;
+                recivedMessages++;
             break;
             case FREE:
                 //Proces wysyłający wiadomość zwolnił miejsce na trakcie
@@ -128,20 +131,27 @@ void *messageReciver(void *message_c){
                 int senderId = message[SENDER_ID];
                 int senderRoadNumber = message[ROAD_NUMBER];
                 if(senderRoadNumber == myRoadNumber){
-                    legions[senderId] = 1;
+                    legions[senderId] = 0;
                 }                
             break;
             case ASK_FOR_SPACE:
-                if(askForSpace(message) == 1){
+                if(askForSpace(message) == 0){
                     //Odesłanie potwiedzenia
-                    acceptMessage();
+                    acceptMessage(message);
                 } else {
                     //odesłanie sprzeciwu
                     refuseMessage(message);
                 }
             break;
             default:
-        }         
+        }        
+
+        pthread_mutex_lock(&mutex);
+        if(recivedMessages == size - 1){
+            recivedAllMessages == true;
+            pthread_cond_signal(&cond);
+        }        
+        pthread_mutex_unlock(&mutex); 
     }     
     return NULL;
 }
@@ -154,8 +164,18 @@ void localSection(int maxWaitTime){
     sleep(waitTime);
 }
 
+void criticalSection(int maxWaitTime){
+    printf("%d: Przechodzę przez trakt %d\n", myId, myRoadNumber);
+
+    int waitTime = rand() % (maxWaitTime + 1);
+    sleep(waitTime);
+}
+
 void askForSpace(){
     int* newMessage[MSG_SIZE];
+
+    //Zwiększam swój znacznik czasowy - wysyłam broadcast
+    myTimeStamp++;
 
     newMessage[SENDER_ID] = myId;
     newMessage[ROAD_NUMBER] = myRoadNumber;
@@ -165,29 +185,75 @@ void askForSpace(){
     MPI_Bcast(newMessage, MSG_SIZE, MPI_INT, myId, MPI_COMM_WORLD);
 }
 
+void freeSpace(){
+    int* newMessage[MSG_SIZE];
 
-int main(int argc, char **argv)token
-{
+
+    newMessage[SENDER_ID] = myId;
+    newMessage[ROAD_NUMBER] = myRoadNumber;
+    newMessage[TIME_STAMP] = myTimeStamp;
+    newMessage[MESSAGE_TYPE] = FREE;
+    
+    MPI_Bcast(newMessage, MSG_SIZE, MPI_INT, myId, MPI_COMM_WORLD);
+}
+
+int main(int argc, char **argv){
 
     srand(time(NULL));
 
-	int size;
+
     MPI_Init(&argc, &argv);
 
 	MPI_Comm_rank(MPI_COMM_WORLD, &myId);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-
-    //Ustalenie warości poczatkowych rozmiarow traktów
-
-
-    //Trzeba utworzyć drugi wątek który odbiera wiadomości, żeby inne procesy nie blokowały się na sendzie kiedy ten jest w sekcji krytycznej
-    pthread_t t1;
-    if(pthread_create(&t1, NULL, messageReciver, &message)){
-        perror("Blad: Tworzenie watku! \n");
+    int roadsSize[] = {
+        100,
+        120
     }
 
-    //Liczba marszy po traktach
+    int legionsSize[] = {
+        90,
+        50,
+        10,
+        60,
+        40
+    }
+
+/*
+    int roadsSize[] = {
+        100,
+        120,
+        130,
+        90,
+        70,
+        110
+    }
+
+    int legionsSize[] = {
+        65,
+        20,
+        15,
+        5,
+        58,
+        35,
+        45,
+        69,
+        54,
+        43,
+        21,
+        55,
+        60,
+        60,
+        60,
+        60,
+        60,
+        60,
+        60
+    }
+*/
+
+    //Liczba odbytych marszy po traktach
     int numberOfPasses = 0;
 
     //Maksymalna liczba marszy
@@ -196,6 +262,12 @@ int main(int argc, char **argv)token
     //Maksymalny czas oczekiwania na rozkazy (w sekundach)
     int maxWaitTime = 10;
 
+
+    pthread_t t1;
+    if(pthread_create(&t1, NULL, messageReciver, &message)){
+        perror("Blad: Tworzenie watku! \n");
+    }
+
     //Petla główna
     while(numberOfPasses < maxNumberOfPasses){
         localSection(maxWaitTime);
@@ -203,8 +275,36 @@ int main(int argc, char **argv)token
         //Losowy wybór traktu
         myRoadNumber = rand % NUMBER_OF_ROADS;
 
+        recivedMessages = 0;
+        recivedAllMessages = false;
         askForSpace(myRoadNumber);
-        //Trzeba jakoś uśpić ten wątek dopóki wszystkie inne nie odpowiedzą na zapytanie
+
+        pthread_mutex_lock(&mutex);
+        while(!recivedAllMessages){
+            //Oczekiwanie na odpowiedź od wszystkich procesów
+            pthread_cond_wait(&cond, &mutex);
+        }
+        pthread_mutex_unlock(&mutex);
+
+        //Sprawdzenie czy jest miejsce na trakcie
+        numberOfLegionists = 0;
+        for(i = 0; i < size; i++){
+            if(i != myId){
+                numberOfLegionists += legions[i] * legionsSize[i];
+            }
+        }
+
+        //Sprawdzenie czy jest miejsce na trakcie
+        if(roadsSize[myRoadNumber] < numberOfLegionists + legionsSize[myId]){
+            //wait
+        } else {
+            //Wchodzi na trakt
+            criticalSection(maxWaitTime);
+            //Broadcast o zwolnieniu miejsca
+            freeSpace();
+        }
+
+
     }
 
 
@@ -213,3 +313,4 @@ int main(int argc, char **argv)token
 		
 	MPI_Finalize();
 }
+)

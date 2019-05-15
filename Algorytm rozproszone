@@ -11,12 +11,13 @@ WAŻNE
 
 
 -proces Pi wybiera trakt Tj (losowo)
+        -Proces zwiększa swój znacznik czasowy o 1
         -proces Pi wysyła broadcast - chcę wejść na trakt Tj + swój piorytet
 
 
 -Proces odbiera broadcast - wejście na trakt:
     -Jeżeli odebrany trakt Tj jest identyczny z wybranym przez ten proces:
-        -Jeżeli odebrany piorytet jest mniejszy niż mój:
+        -Jeżeli odebrany znacznik czasowy jest mniejszy niż mój:
             -Proces odsyła potwierdzenie.
             
         -Jeżeli odebrany piorytet jest równy z moim:
@@ -28,11 +29,14 @@ WAŻNE
 
         -W przeciwnym wypadku:
             -Proces odsyła sprzeciw.
-            
+
     -W przeciwnym wypadku:
         -Proces odsyła potwierdzenie.
 
-    -Proces ustawia swój znacznik czasowy na max(odebrany, swój) + 1
+    -Jeżeli proces odysła potwierdzenie:
+        -Proces ustawia swój znacznik czasowy na max(odebrany, swój)
+
+    
     
 ------------------------------------------------------------------------
 
@@ -42,7 +46,7 @@ WAŻNE
         -Jeżeli tak proces zajmuje trakt (wchodzi do sekcji krytycznej)
     -W przeciwnym wypadku:
         -Proces czeka na informację o zwolnieniu traktu przez jakiś proces
-.
+
 
 ------------------------------------------------------------------------
 
