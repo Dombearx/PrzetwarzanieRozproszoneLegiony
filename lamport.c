@@ -41,7 +41,14 @@ int myTimeStamp;
 int myId;
 int size;
 
+int recivedMessages;
 bool recivedAllMessages = false;
+bool isMoreSpace = false;
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutexSpace = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+pthread_cond_t condSpace = PTHREAD_COND_INITIALIZER;
 
 
 
@@ -49,7 +56,7 @@ bool recivedAllMessages = false;
  * Zwraca 0 jeżeli należy odesłać potwiedzenie
  * Zwraca 1 jeżeli nalezy odesłac sprzeciw
 **/
-int askForSpace(int* message){
+int recivedAskForSpace(int* message){
     int roadNumber = message[ROAD_NUMBER];
     if(myRoadNumber == roadNumber){
         //Proces ubiega się o ten sam trakt 
@@ -78,10 +85,10 @@ int askForSpace(int* message){
 }
 
 
-void acceptMessage(nt* message){
+void acceptMessage(int* message){
     int reciver = message[SENDER_ID];
 
-    int* newMessage;
+    int newMessage[MSG_SIZE];
     newMessage[ROAD_NUMBER] = myRoadNumber;
     newMessage[TIME_STAMP] = myTimeStamp;
     newMessage[SENDER_ID] = myId;
@@ -94,7 +101,7 @@ void refuseMessage(int* message){
 
     int reciver = message[SENDER_ID];
 
-    int* newMessage;
+    int newMessage[MSG_SIZE];
     newMessage[ROAD_NUMBER] = myRoadNumber;
     newMessage[TIME_STAMP] = myTimeStamp;
     newMessage[SENDER_ID] = myId;
@@ -104,38 +111,38 @@ void refuseMessage(int* message){
 }
 
 
-//----------------------------------------------------
-//Trzeba jeszcze dodać zwiększanie znacznikaTOKEN_MAX_VALUE czasowego
-//W przypadku odebrania zapytania? 
-//Tylko - chyba, nie zwiększa się znacznik gdy odbieramy odpowiedź na nasz broadcast
-//----------------------------------------------------
 void *messageReciver(void *message_c){
     int *message = (int*)message_c;
+    int senderId; 
     while(1){
         MPI_Recv(message, MSG_SIZE, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
         switch(message[MESSAGE_TYPE]){
             case ACCEPT:
-                int senderId = message[SENDER_ID];
+                senderId = message[SENDER_ID];
                 legions[senderId] = 0;
                 recivedMessages++;
             break;
             case REFUSE:
                 //Proces wysyłający wiadomość odmawia zajęcia traktu - jest szybciej w kolejce do niego
-                int senderId = message[SENDER_ID];
+                senderId = message[SENDER_ID];
                 legions[senderId] = 1;
                 recivedMessages++;
             break;
             case FREE:
                 //Proces wysyłający wiadomość zwolnił miejsce na trakcie
                 //Należy usunąć go z listy procesów zajmujących / oczekujących na trakt, jeżeli ten proces czeka na ten trakt
-                int senderId = message[SENDER_ID];
+                senderId = message[SENDER_ID];
                 int senderRoadNumber = message[ROAD_NUMBER];
                 if(senderRoadNumber == myRoadNumber){
                     legions[senderId] = 0;
                 }                
+                pthread_mutex_lock(&mutexSpace);
+                isMoreSpace == true;
+                pthread_cond_signal(&condSpace);    
+                pthread_mutex_unlock(&mutexSpace); 
             break;
             case ASK_FOR_SPACE:
-                if(askForSpace(message) == 0){
+                if(recivedAskForSpace(message) == 0){
                     //Odesłanie potwiedzenia
                     acceptMessage(message);
                 } else {
@@ -144,23 +151,25 @@ void *messageReciver(void *message_c){
                 }
             break;
             default:
+            break;
         }        
-
         pthread_mutex_lock(&mutex);
         if(recivedMessages == size - 1){
-            recivedAllMessages == true;
+            printf("%d: odebralem wszystkie wiadomosci\n", myId);
+            recivedAllMessages = true;
             pthread_cond_signal(&cond);
         }        
         pthread_mutex_unlock(&mutex); 
     }     
     return NULL;
 }
-
+       
 
 void localSection(int maxWaitTime){
     printf("%d: oczekuje na rozkazy w sekcji lokalnej\n", myId);
 
     int waitTime = rand() % (maxWaitTime + 1);
+    printf("%d: poczekam %d sekund\n", myId, waitTime);
     sleep(waitTime);
 }
 
@@ -172,34 +181,43 @@ void criticalSection(int maxWaitTime){
 }
 
 void askForSpace(){
-    int* newMessage[MSG_SIZE];
+    int newMessage[MSG_SIZE];
 
     //Zwiększam swój znacznik czasowy - wysyłam broadcast
     myTimeStamp++;
 
-    newMessage[SENDER_ID] = myId;
+    
     newMessage[ROAD_NUMBER] = myRoadNumber;
     newMessage[TIME_STAMP] = myTimeStamp;
+    newMessage[SENDER_ID] = myId;
     newMessage[MESSAGE_TYPE] = ASK_FOR_SPACE;
-    
-    MPI_Bcast(newMessage, MSG_SIZE, MPI_INT, myId, MPI_COMM_WORLD);
+
+    for(int i = 0; i < size; i++){
+        if(i != myId){
+            MPI_Send(newMessage, MSG_SIZE, MPI_INT, i, MSG_TAG_TOKEN, MPI_COMM_WORLD);
+        }
+    }
+    printf("%d: rozeslalem broadcast\n", myId);
 }
 
 void freeSpace(){
-    int* newMessage[MSG_SIZE];
-
+    int newMessage[MSG_SIZE];
 
     newMessage[SENDER_ID] = myId;
     newMessage[ROAD_NUMBER] = myRoadNumber;
     newMessage[TIME_STAMP] = myTimeStamp;
     newMessage[MESSAGE_TYPE] = FREE;
     
-    MPI_Bcast(newMessage, MSG_SIZE, MPI_INT, myId, MPI_COMM_WORLD);
+    for(int i = 0; i < size; i++){
+        if(i != myId){
+            MPI_Send(newMessage, MSG_SIZE, MPI_INT, i, MSG_TAG_TOKEN, MPI_COMM_WORLD);
+        }
+    }
 }
 
 int main(int argc, char **argv){
 
-    srand(time(NULL));
+    
 
 
     MPI_Init(&argc, &argv);
@@ -207,10 +225,12 @@ int main(int argc, char **argv){
 	MPI_Comm_rank(MPI_COMM_WORLD, &myId);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    srand(time(NULL) + myId);
+
     int roadsSize[] = {
         100,
         120
-    }
+    };
 
     int legionsSize[] = {
         90,
@@ -218,7 +238,7 @@ int main(int argc, char **argv){
         10,
         60,
         40
-    }
+    };
 
 /*
     int roadsSize[] = {
@@ -273,37 +293,48 @@ int main(int argc, char **argv){
         localSection(maxWaitTime);
 
         //Losowy wybór traktu
-        myRoadNumber = rand % NUMBER_OF_ROADS;
+        myRoadNumber = rand() % NUMBER_OF_ROADS;
+        printf("%d: wylosowalem trakt: %d\n", myId, myRoadNumber);
 
         recivedMessages = 0;
         recivedAllMessages = false;
+        isMoreSpace = false;
+        printf("%d: rozsylam broadcast\n", myId);
         askForSpace(myRoadNumber);
 
         pthread_mutex_lock(&mutex);
         while(!recivedAllMessages){
             //Oczekiwanie na odpowiedź od wszystkich procesów
+            printf("%d: czekam na odpowiedz od wszystkich\n", myId);
             pthread_cond_wait(&cond, &mutex);
         }
+        printf("%d: sprawdzam miejsce na trakcie\n", myId);
         pthread_mutex_unlock(&mutex);
 
-        //Sprawdzenie czy jest miejsce na trakcie
-        numberOfLegionists = 0;
-        for(i = 0; i < size; i++){
+        
+        //Sprawdzenie ile miejsca jest zajętego na trakcie
+        int numberOfLegionists = 0;
+        for(int i = 0; i < size; i++){
             if(i != myId){
                 numberOfLegionists += legions[i] * legionsSize[i];
             }
         }
 
         //Sprawdzenie czy jest miejsce na trakcie
-        if(roadsSize[myRoadNumber] < numberOfLegionists + legionsSize[myId]){
-            //wait
-        } else {
-            //Wchodzi na trakt
-            criticalSection(maxWaitTime);
-            //Broadcast o zwolnieniu miejsca
-            freeSpace();
+        while(roadsSize[myRoadNumber] < numberOfLegionists + legionsSize[myId]){
+            pthread_mutex_lock(&mutexSpace);
+            while(!isMoreSpace){
+                //Oczekiwanie na odpowiedź od wszystkich procesów
+                pthread_cond_wait(&condSpace, &mutexSpace);
+            }
+            isMoreSpace = false;
+            pthread_mutex_unlock(&mutexSpace);
         }
-
+        //Wchodzi na trakt
+        criticalSection(maxWaitTime);
+        //Broadcast o zwolnieniu miejsca
+        freeSpace();
+        printf("%d: zwalniam miejsce na trakcie\n", myId);
 
     }
 
@@ -313,4 +344,3 @@ int main(int argc, char **argv){
 		
 	MPI_Finalize();
 }
-)
