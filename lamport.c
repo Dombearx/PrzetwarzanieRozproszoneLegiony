@@ -74,33 +74,27 @@ int recivedAskForSpace(int* message){
         int timeStamp = message[TIME_STAMP];
 	if(imOnRoad){
 	    //jestem na trakcie - należy odesłać sprzeciw
-            printf(KRED "%d: SPRZECIW - jestem na trakcie %d\n", myId, myRoadNumber);
             return 1;  
 	}
         if(myTimeStamp < timeStamp){
             //Znacznik czasowy tego procesu jest mniejszy, nalezy odesłać sprzeciw
-            printf(KRED "%d: SPRZECIW - lepszy znacznik czasowy niz %d\n", myId, message[SENDER_ID]);
             return 1;  
         } else if(myTimeStamp == timeStamp){
             //Równy piorytet - należy sprawdzić id procesu, aby wybrać lepszy
             int senderId = message[SENDER_ID];
             if(myId < senderId){
                 //Id tego procesu jest lepsze, nalezy odesłac sprzeciw
-            	printf(KRED "%d: SPRZECIW - lepsze id niz %d\n", myId, message[SENDER_ID]);
                 return 1;
             } else {
                 //Proces ma lepsze id, nigdy nie będą równe
-            	printf(KBLU "%d: OK - gorsze id niz %d\n", myId, message[SENDER_ID]);
                 return 0;
             }        
         } else {
             //Odebrany znacznik czasowy jest mniejszy niż mój
-            printf(KBLU "%d: OK - gorszy znacznik czasowy niz %d\n", myId, message[SENDER_ID]);
             return 0;
         }        
     } else {
         //Proces ubiega się o inny trakt
-	printf(KBLU "%d: OK - inny trakt niz %d\n", myId, message[SENDER_ID]);
         return 0;
     }
 }
@@ -155,7 +149,6 @@ void *messageReciver(void *message_c){
             
  		senderId = message[SENDER_ID];
                 int senderRoadNumber = message[ROAD_NUMBER];
-            	printf(KNRM "%d: odebralem informacje o zwolnieniu miejsca od %d na trakcie %d\n", myId, senderId, senderRoadNumber);   
                 if(senderRoadNumber == myRoadNumber){
                     legions[senderId] = 0;
                 }                
@@ -178,7 +171,6 @@ void *messageReciver(void *message_c){
         }        
         pthread_mutex_lock(&mutex);
         if(broadcastSend && recivedMessages == size - 1){
-            printf(KNRM "%d: odebralem wszystkie wiadomosci\n", myId);
             recivedAllMessages = true;
             pthread_cond_signal(&cond);
         }        
@@ -201,6 +193,7 @@ void criticalSection(int maxWaitTime){
     printf(KGRN "%d: Przechodzę przez trakt %d\n", myId, myRoadNumber);
 
     int waitTime = rand() % (maxWaitTime + 1);
+    printf(KNRM "%d: będę przechodzić przez %d sekund\n", myId, waitTime);
     sleep(waitTime);
     imOnRoad = false;
 }
@@ -223,7 +216,6 @@ void askForSpace(){
             MPI_Send(newMessage, MSG_SIZE, MPI_INT, i, MSG_TAG_TOKEN, MPI_COMM_WORLD);
         }
     }
-    printf(KYEL "%d: rozeslalem broadcast\n", myId);
 }
 
 void freeSpace(){
@@ -325,21 +317,17 @@ int main(int argc, char **argv){
 
         //Losowy wybór traktu
         myRoadNumber = rand() % NUMBER_OF_ROADS;
-        printf(KNRM "%d: wylosowalem trakt: %d\n", myId, myRoadNumber);
 
         recivedMessages = 0;
         recivedAllMessages = false;
         isMoreSpace = false;
-        printf(KYEL "%d: rozsylam broadcast\n", myId);
         askForSpace(myRoadNumber);
 
         pthread_mutex_lock(&mutex);
         while(!recivedAllMessages){
             //Oczekiwanie na odpowiedź od wszystkich procesów
-            printf(KNRM "%d: czekam na odpowiedz od wszystkich\n", myId);
             pthread_cond_wait(&cond, &mutex);
         }	
-        printf(KNRM "%d: sprawdzam miejsce na trakcie\n", myId);
         pthread_mutex_unlock(&mutex);
 
         broadcastSend = false;
@@ -353,16 +341,11 @@ int main(int argc, char **argv){
 
         //Sprawdzenie czy jest miejsce na trakcie
         while(roadsSize[myRoadNumber] < numberOfLegionists + legionsSize[myId]){
-            printf(KNRM "%d: moj rozmiar: %d\n", myId, legionsSize[myId]);
-            printf(KNRM "%d: rozmiar traktu: %d\n", myId, roadsSize[myRoadNumber]);
-            printf(KNRM "%d: zajete miejsce: %d\n", myId, numberOfLegionists);
             pthread_mutex_lock(&mutexSpace);
             while(!isMoreSpace){
-		printf(KNRM "%d: czekam na zwolnienie miejsca na trakcie %d\n", myId, myRoadNumber);
                 //Oczekiwanie na zwolnienie miejsca
                 pthread_cond_wait(&condSpace, &mutexSpace);
             }
-	    printf(KYEL "%d: odnotowalem zwolnienie miejsca na trakcie: %d\n", myId, myRoadNumber);
             isMoreSpace = false;
             pthread_mutex_unlock(&mutexSpace);
 
@@ -373,7 +356,7 @@ int main(int argc, char **argv){
 	    	}
 	    }
         }
-	printf(KGRN "%d: wchodze na trakt\n", myId);
+	printf(KBLU "%d: wchodze na trakt\n", myId);
         //Wchodzi na trakt
         criticalSection(maxWaitTime);
         //Broadcast o zwolnieniu miejsca
