@@ -22,8 +22,8 @@
 
 #define MSG_TAG_TOKEN 10
 #define TOKEN_MAX_VALUE 10
-#define NUMBER_OF_LEGIONS 2
-#define NUMBER_OF_ROADS 1
+#define NUMBER_OF_LEGIONS 5
+#define NUMBER_OF_ROADS 2
 
 #define ROAD_NUMBER 0
 #define TIME_STAMP 1
@@ -256,12 +256,17 @@ int main(int argc, char **argv){
     srand(time(NULL) + myId);
 
     int roadsSize[] = {
-        100
+        100,
+	120
+
     };
 
     int legionsSize[] = {
         90,
-        50
+        50,
+	40,
+	10,
+	80
     };
 
     myRoadNumber = -1;
