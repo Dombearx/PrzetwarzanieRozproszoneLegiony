@@ -21,7 +21,6 @@
 #define ASK_FOR_SPACE 14
 
 #define MSG_TAG_TOKEN 10
-#define TOKEN_MAX_VALUE 10
 #define NUMBER_OF_LEGIONS 5
 #define NUMBER_OF_ROADS 2
 
@@ -100,7 +99,7 @@ int recivedAskForSpace(int* message){
         }        
     } else {
         //Proces ubiega się o inny trakt
-	printf(KBLU "%d: OK - inny trakt niz %d\n", myId, message[SENDER_ID]);
+	    printf(KBLU "%d: OK - inny trakt niz %d\n", myId, message[SENDER_ID]);
         return 0;
     }
 }
@@ -153,14 +152,14 @@ void *messageReciver(void *message_c){
                 //Proces wysyłający wiadomość zwolnił miejsce na trakcie
                 //Należy usunąć go z listy procesów zajmujących / oczekujących na trakt, jeżeli ten proces czeka na ten trakt
             
- 		senderId = message[SENDER_ID];
+ 		        senderId = message[SENDER_ID];
                 int senderRoadNumber = message[ROAD_NUMBER];
             	printf(KNRM "%d: odebralem informacje o zwolnieniu miejsca od %d na trakcie %d\n", myId, senderId, senderRoadNumber);   
                 if(senderRoadNumber == myRoadNumber){
                     legions[senderId] = 0;
                 }                
                 pthread_mutex_lock(&mutexSpace); 
-		isMoreSpace = true;               
+		        isMoreSpace = true;               
                 pthread_cond_signal(&condSpace);    
                 pthread_mutex_unlock(&mutexSpace); 
             break;
@@ -257,52 +256,19 @@ int main(int argc, char **argv){
 
     int roadsSize[] = {
         100,
-	120
-
+	    120
     };
 
     int legionsSize[] = {
         90,
         50,
-	40,
-	10,
-	80
+	    40,
+	    10,
+    	80
     };
 
     myRoadNumber = -1;
 
-/*
-    int roadsSize[] = {
-        100,
-        120,
-        130,
-        90,
-        70,
-        110
-    }
-
-    int legionsSize[] = {
-        65,
-        20,
-        15,
-        5,
-        58,
-        35,
-        45,
-        69,
-        54,
-        43,
-        21,
-        55,
-        60,
-        60,
-        60,
-        60,
-        60,
-        60,
-        60
-    }
-*/
 
     //Liczba odbytych marszy po traktach
     int numberOfPasses = 0;
